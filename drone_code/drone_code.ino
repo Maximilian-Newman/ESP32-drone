@@ -70,8 +70,8 @@ void setup() {
     while (1) {delay(10);}
   }
   //mpu.calcOffsets(true, true);
-  mpu.setAccelerometerRange(MPU6050_RANGE_4_G);
-  mpu.setGyroRange(MPU6050_RANGE_250_DEG);
+  mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
+  mpu.setGyroRange(MPU6050_RANGE_500_DEG);
   
   sensors_event_t a, g, temp;
 
