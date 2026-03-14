@@ -11,7 +11,7 @@ WiFiClient client;
 
 Adafruit_MPU6050 mpu;
 
-const String FIRMWARE_VERSION = "1.1";
+const String FIRMWARE_VERSION = "1.2";
 
 byte pinA = 4;
 byte pinB = 5;
@@ -49,7 +49,45 @@ int thrustB = 0;
 int thrustC = 0;
 int thrustD = 0;
 
+bool propLock = false;
+
 unsigned long lastTime = 0;
+
+
+void recalibrate(){
+  sensors_event_t a, g, temp;
+  unsigned int numCalibReadings = 3000;
+  digitalWrite(7, HIGH); // LED blue
+  digitalWrite(8, LOW);
+  digitalWrite(9, LOW);
+  
+  gyroOffsetX = 0;
+  gyroOffsetY = 0;
+  accOffsetX = 0;
+  accOffsetY = 0;
+  accOffsetZ = 0;
+
+  Serial.println("Callibrating, please wait");
+
+  for (unsigned int i=0; i<numCalibReadings; i++) {
+    mpu.getEvent(&a, &g, &temp);
+    gyroOffsetX += g.gyro.x;
+    gyroOffsetY += g.gyro.y;
+    accOffsetX += a.acceleration.x;
+    accOffsetY += a.acceleration.y;
+    accOffsetZ += a.acceleration.z;
+    delay(2);
+  }
+  gyroOffsetX /= numCalibReadings;
+  gyroOffsetY /= numCalibReadings;
+  accOffsetX /= numCalibReadings;
+  accOffsetY /= numCalibReadings;
+  accOffsetZ /= numCalibReadings;
+
+  digitalWrite(7, LOW); // LED green
+  digitalWrite(8, LOW);
+  digitalWrite(9, HIGH);
+}
  
 void setup() {
   Serial.begin(115200);
@@ -72,36 +110,13 @@ void setup() {
   //mpu.calcOffsets(true, true);
   mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
   mpu.setGyroRange(MPU6050_RANGE_500_DEG);
-  
-  sensors_event_t a, g, temp;
-
-  unsigned int numCalibReadings = 3000;
-
-  Serial.println("Callibrating, please wait");
-
-  for (unsigned int i=0; i<numCalibReadings; i++) {
-    mpu.getEvent(&a, &g, &temp);
-    gyroOffsetX += g.gyro.x;
-    gyroOffsetY += g.gyro.y;
-    accOffsetX += a.acceleration.x;
-    accOffsetY += a.acceleration.y;
-    accOffsetZ += a.acceleration.z;
-    delay(2);
-  }
-  gyroOffsetX /= numCalibReadings;
-  gyroOffsetY /= numCalibReadings;
-  accOffsetX /= numCalibReadings;
-  accOffsetY /= numCalibReadings;
-  accOffsetZ /= numCalibReadings;
+  recalibrate();
 
   WiFi.softAPConfig(apIP, apIP, netMsk);
-  WiFi.softAP("AeroHacks Drone 1", "skibidi123");
+  WiFi.softAP("AeroHacks Drone 18", "skibidi123");
   tcpServer.begin();
 
   Serial.println("ready");
-  digitalWrite(7, LOW); // LED green
-  digitalWrite(8, LOW);
-  digitalWrite(9, HIGH);
 
   lastTime = millis();
 }
@@ -168,6 +183,8 @@ void loop() {
     else if (instruct == "lr0") {digitalWrite(8, LOW);}
     else if (instruct == "lg1") {digitalWrite(9, HIGH);}
     else if (instruct == "lg0") {digitalWrite(9, LOW);}
+    else if (instruct == "rst") {recalibrate();}
+    else if (instruct == "lck") {propLock = true;}
     
     else if (instruct.startsWith("mode")) {
       instruct.remove(0, 4);
@@ -327,6 +344,13 @@ void loop() {
   if (newThrustB > 250) {newThrustB = 250;}
   if (newThrustC > 250) {newThrustC = 250;}
   if (newThrustD > 250) {newThrustD = 250;}
+
+  if (propLock) {
+    newThrustA = 0;
+    newThrustB = 0;
+    newThrustC = 0;
+    newThrustD = 0;
+  }
 
   analogWrite(pinA, newThrustA);
   analogWrite(pinB, newThrustB);
