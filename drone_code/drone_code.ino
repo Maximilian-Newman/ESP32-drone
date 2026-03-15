@@ -1,5 +1,6 @@
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
 #include <Wire.h>
-#include <MPU6050_light.h>
 
 
 #include <WiFi.h>
@@ -8,9 +9,9 @@ IPAddress netMsk(255, 255, 255, 0);
 WiFiServer tcpServer(8080);
 WiFiClient client;
 
-MPU6050 mpu(Wire);
+Adafruit_MPU6050 mpu;
 
-const String FIRMWARE_VERSION = "2.0";
+const String FIRMWARE_VERSION = "1.4";
 
 byte pinA = 4;
 byte pinB = 5;
@@ -54,15 +55,17 @@ unsigned long lastTime = 0;
 
 
 void recalibrate(){
+  digitalWrite(pinA, LOW);
+  digitalWrite(pinB, LOW);
+  digitalWrite(pinC, LOW);
+  digitalWrite(pinD, LOW);
+
+  sensors_event_t a, g, temp;
+  unsigned int numCalibReadings = 3000;
   digitalWrite(7, HIGH); // LED blue
   digitalWrite(8, LOW);
   digitalWrite(9, LOW);
 
-  mpu.calcOffsets(true, true);
-
-/*
-  sensors_event_t a, g, temp;
-  unsigned int numCalibReadings = 3000;
   gyroX = 0;
   gyroY = 0;
 
@@ -88,7 +91,6 @@ void recalibrate(){
   accOffsetX /= numCalibReadings;
   accOffsetY /= numCalibReadings;
   accOffsetZ /= numCalibReadings;
-  */
 
   digitalWrite(7, LOW); // LED green
   digitalWrite(8, LOW);
@@ -113,10 +115,12 @@ void setup() {
     digitalWrite(8, HIGH);
     while (1) {delay(10);}
   }
+  mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
+  mpu.setGyroRange(MPU6050_RANGE_500_DEG);
   recalibrate();
 
   WiFi.softAPConfig(apIP, apIP, netMsk);
-  WiFi.softAP("AeroHacks Drone v3 test", "skibidi123");
+  WiFi.softAP("AeroHacks Drone 7", "skibidi123");
   tcpServer.begin();
 
   Serial.println("ready");
@@ -133,26 +137,36 @@ void setup() {
 
 void loop() {
   unsigned long newTime = millis();
-  unsigned int dt = newTime - lastTime;
+  //float dt = (newTime - lastTime) / 1000;
+  unsigned int dt = (newTime - lastTime);
   lastTime = newTime;
 
   lastGyroX = gyroX;
   lastGyroY = gyroY;
 
-  mpu.update();
-  gyroX = mpu.getAngleX();
-  gyroY = mpu.getAngleY();
-  float gyroVX = mpu.getGyroX();
-  float gyroVY = mpu.getGyroY();
 
+  sensors_event_t a, g, temp;
+  mpu.getEvent(&a, &g, &temp);
 
-  //sensors_event_t a, g, temp;
-  //mpu.getEvent(&a, &g, &temp);
+  float gyroVX = g.gyro.x - gyroOffsetX;
+  float gyroVY = g.gyro.y - gyroOffsetY;
+  gyroX -= gyroVX * dt;
+  gyroY -= gyroVY * dt;
+  
+  float az = a.acceleration.z - accOffsetZ;
+  float ax = a.acceleration.x - accOffsetX;
+  float ay = a.acceleration.y - accOffsetY;
 
-  //float gyroVX = g.gyro.x - gyroOffsetX;
-  //float gyroVY = g.gyro.y - gyroOffsetY;
-  //gyroX -= gyroVX * dt;
-  //gyroY -= gyroVY * dt;
+  float y_acc  = atan2(ay, az) * 180/PI * 16;
+  float x_acc = atan2(-ax, sqrt(ay*ay + az*az)) * 180/PI * 16;
+
+  //yroX = 0.98*(gyroX  - gyroVX*dt) - 0.02*x_acc;
+  //gyroY = 0.98*(gyroY  - gyroVY*dt) - 0.02*y_acc;
+
+  //Serial.print(gyroX / 16);
+  //Serial.print(',');
+  //Serial.println(gyroY / 16);
+  
 
   if (gyroX > MAX_ANGLE or gyroX < -MAX_ANGLE or gyroY > MAX_ANGLE or gyroY < -MAX_ANGLE) {
     mode = 0;
