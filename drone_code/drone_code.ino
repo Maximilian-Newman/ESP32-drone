@@ -11,7 +11,7 @@ WiFiClient client;
 
 Adafruit_MPU6050 mpu;
 
-const String FIRMWARE_VERSION = "1.4";
+const String FIRMWARE_VERSION = "2.0";
 
 byte pinA = 4;
 byte pinB = 5;
@@ -27,12 +27,14 @@ float I = 0.00001;
 float D = 5;
 
 float yaw = 0;
+float cmdYaw = 0;
 
 float targetGyroX = 0;
 float targetGyroY = 0;
 
 float gyroOffsetX = 0;
 float gyroOffsetY = 0;
+float gyroOffsetZ = 0;
 float accOffsetX = 0;
 float accOffsetY = 0;
 float accOffsetZ = 0;
@@ -52,6 +54,7 @@ int thrustD = 0;
 bool propLock = false;
 
 unsigned long lastTime = 0;
+unsigned long lastCom = 0;
 
 
 void recalibrate(){
@@ -68,6 +71,8 @@ void recalibrate(){
 
   gyroX = 0;
   gyroY = 0;
+  cmdYaw = 0;
+  yaw = 0;
 
   gyroOffsetX = 0;
   gyroOffsetY = 0;
@@ -81,6 +86,7 @@ void recalibrate(){
     mpu.getEvent(&a, &g, &temp);
     gyroOffsetX += g.gyro.x;
     gyroOffsetY += g.gyro.y;
+    gyroOffsetZ += g.gyro.z;
     accOffsetX += a.acceleration.x;
     accOffsetY += a.acceleration.y;
     accOffsetZ += a.acceleration.z;
@@ -88,6 +94,7 @@ void recalibrate(){
   }
   gyroOffsetX /= numCalibReadings;
   gyroOffsetY /= numCalibReadings;
+  gyroOffsetZ /= numCalibReadings;
   accOffsetX /= numCalibReadings;
   accOffsetY /= numCalibReadings;
   accOffsetZ /= numCalibReadings;
@@ -120,7 +127,7 @@ void setup() {
   recalibrate();
 
   WiFi.softAPConfig(apIP, apIP, netMsk);
-  WiFi.softAP("AeroHacks Drone 18", "skibidi123");
+  WiFi.softAP("AeroHacks Drone 13", "skibidi123");
   tcpServer.begin();
 
   Serial.println("ready");
@@ -149,6 +156,7 @@ void loop() {
 
   float gyroVX = g.gyro.x - gyroOffsetX;
   float gyroVY = g.gyro.y - gyroOffsetY;
+  float gyroVZ = g.gyro.z - gyroOffsetZ;
   gyroX -= gyroVX * dt;
   gyroY -= gyroVY * dt;
   
@@ -220,7 +228,7 @@ void loop() {
     
     else if (instruct.startsWith("yaw")) {
       instruct.remove(0, 3);
-      yaw = instruct.toFloat();
+      cmdYaw = instruct.toFloat();
     }
     
     else if (instruct == "irst") {
@@ -252,6 +260,11 @@ void loop() {
 
 
     client.print("\n");
+    lastCom = millis();
+  }
+
+  if (millis() - lastCom > 4000) {
+    mode = 0;
   }
 
   float thrustOffA = 0;
@@ -260,6 +273,9 @@ void loop() {
   float thrustOffD = 0;
 
   if (mode == 2){
+    if (gyroVZ > cmdYaw) {yaw -= dt / 500;}
+    else if (gyroVZ < cmdYaw) {yaw += dt / 500;}
+
     I_valX += (gyroX - targetGyroX) * dt;
     I_valY += (gyroY - targetGyroY) * dt;
 
