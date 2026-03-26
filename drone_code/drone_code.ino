@@ -2,6 +2,9 @@
 #include <Adafruit_Sensor.h>
 #include <Wire.h>
 
+//#include "esp32-hal-timer.h"
+//hw_timer_t *timer = NULL;
+
 
 #include <WiFi.h>
 IPAddress apIP(192, 168, 4, 1);
@@ -41,6 +44,10 @@ float accOffsetZ = 0;
 
 float gyroX = 0;
 float gyroY = 0;
+float gyroVX = 0;
+float gyroVY = 0;
+float gyroVZ = 0;
+
 float lastGyroX = 0;
 float lastGyroY = 0;
 float I_valX = 0;
@@ -54,7 +61,32 @@ int thrustD = 0;
 bool propLock = false;
 
 unsigned long lastTime = 0;
+unsigned long lastGyroTime = 0;
 unsigned long lastCom = 0;
+
+
+void gyro_update(){
+  unsigned long newTime = micros();
+  unsigned int dt_1000 = (newTime - lastGyroTime);
+  float dt = dt_1000;
+  dt = dt / 1000;
+  lastGyroTime = newTime;
+
+  lastGyroX = gyroX;
+  lastGyroY = gyroY;
+
+
+  sensors_event_t a, g, temp;
+  mpu.getEvent(&a, &g, &temp);
+
+  gyroVX = g.gyro.x - gyroOffsetX;
+  gyroVY = g.gyro.y - gyroOffsetY;
+  gyroVZ = g.gyro.z - gyroOffsetZ;
+  gyroX -= gyroVX * dt;
+  gyroY -= gyroVY * dt;
+
+  Serial.println(dt);
+}
 
 
 void recalibrate(){
@@ -127,12 +159,24 @@ void setup() {
   recalibrate();
 
   WiFi.softAPConfig(apIP, apIP, netMsk);
-  WiFi.softAP("AeroHacks Drone 13", "skibidi123");
+  WiFi.softAP("AeroHacks Drone 9", "skibidi123");
   tcpServer.begin();
+
+  /*timer = timerBegin(1000000);   
+
+  if (timer == NULL) {
+      Serial.println("Error with the start of the timer");
+      digitalWrite(7, LOW); // LED red
+      digitalWrite(8, HIGH);
+      while (1);
+  }
+  timerAttachInterrupt(timer, &gyro_update);
+  timerStart(timer);*/
 
   Serial.println("ready");
 
-  lastTime = millis();
+  lastTime = micros();
+  lastGyroTime = micros();
 }
 
 
@@ -143,22 +187,13 @@ void setup() {
 
 
 void loop() {
-  unsigned long newTime = millis();
-  unsigned int dt = (newTime - lastTime);
+  gyro_update();
+
+  unsigned long newTime = micros();
+  unsigned int dt_1000 = (newTime - lastTime);
+  float dt = dt_1000;
+  dt = dt / 1000;
   lastTime = newTime;
-
-  lastGyroX = gyroX;
-  lastGyroY = gyroY;
-
-
-  sensors_event_t a, g, temp;
-  mpu.getEvent(&a, &g, &temp);
-
-  float gyroVX = g.gyro.x - gyroOffsetX;
-  float gyroVY = g.gyro.y - gyroOffsetY;
-  float gyroVZ = g.gyro.z - gyroOffsetZ;
-  gyroX -= gyroVX * dt;
-  gyroY -= gyroVY * dt;
   
 
   if (gyroX > MAX_ANGLE or gyroX < -MAX_ANGLE or gyroY > MAX_ANGLE or gyroY < -MAX_ANGLE) {
@@ -263,9 +298,9 @@ void loop() {
     lastCom = millis();
   }
 
-  if (millis() - lastCom > 4000) {
-    mode = 0;
-  }
+  //if (millis() - lastCom > 4000) {
+  //  mode = 0;
+  //}
 
   float thrustOffA = 0;
   float thrustOffB = 0;
@@ -273,8 +308,8 @@ void loop() {
   float thrustOffD = 0;
 
   if (mode == 2){
-    if (gyroVZ > cmdYaw) {yaw -= dt / 500;}
-    else if (gyroVZ < cmdYaw) {yaw += dt / 500;}
+    if (gyroVZ > cmdYaw) {yaw += 0.1;}
+    else if (gyroVZ < cmdYaw) {yaw -= 0.1;}
 
     I_valX += (gyroX - targetGyroX) * dt;
     I_valY += (gyroY - targetGyroY) * dt;
@@ -346,6 +381,9 @@ void loop() {
   if (thrustOffC > TURNING_THRUST_LIMIT) {thrustOffC = TURNING_THRUST_LIMIT;}
   if (thrustOffD > TURNING_THRUST_LIMIT) {thrustOffD = TURNING_THRUST_LIMIT;}
 
+  if (yaw > 80) {yaw = 80;}
+  if (yaw < -80) {yaw = -80;}
+
   int newThrustA = thrustA + thrustOffA - yaw;
   int newThrustB = thrustB + thrustOffB + yaw;
   int newThrustC = thrustC + thrustOffC + yaw;
@@ -372,4 +410,6 @@ void loop() {
   analogWrite(pinB, newThrustB);
   analogWrite(pinC, newThrustC);
   analogWrite(pinD, newThrustD);
+
+  //Serial.println(dt);
 }
