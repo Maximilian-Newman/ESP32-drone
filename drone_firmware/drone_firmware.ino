@@ -9,7 +9,7 @@ WiFiClient client;
 
 MPU6050 mpu6050(Wire);
 
-const String FIRMWARE_VERSION = "3.0";
+const String FIRMWARE_VERSION = "2.1";
 
 byte pinA = 4;
 byte pinB = 5;
@@ -17,6 +17,7 @@ byte pinC = 3;
 byte pinD = 6;
 
 byte mode = 0;
+byte errorCondition = 0; // 0: normal, 1: max-angle protection, 2: communication timeout protection
 
 const float MAX_ANGLE = 800;
 const byte TURNING_THRUST_LIMIT = 120;
@@ -57,6 +58,7 @@ void recalibrate(){
 
   cmdYaw = 0;
   yaw = 0;
+  errorCondition = 0;
 
   Serial.println("Callibrating, please wait");
 
@@ -123,6 +125,7 @@ void loop() {
 
   float gyroX = mpu6050.getAngleX();
   float gyroY = mpu6050.getAngleY();
+  float gyroZ = mpu6050.getAngleY(); // add absolute yaw angle control later
   float gyroVX = mpu6050.getGyroX();
   float gyroVY = mpu6050.getGyroY();
   float gyroVZ = mpu6050.getGyroZ();
@@ -136,8 +139,23 @@ void loop() {
 
   if (gyroX > MAX_ANGLE or gyroX < -MAX_ANGLE or gyroY > MAX_ANGLE or gyroY < -MAX_ANGLE) {
     mode = 0;
+    errorCondition = 1;
     digitalWrite(8, HIGH);
   }
+
+  if (millis() - lastCom > 10000) {
+    mode = 0;
+    errorCondition = 2;
+    digitalWrite(8, HIGH);
+  }
+
+
+
+
+
+
+
+
 
   if (!client) {client = tcpServer.available();}
   else if (!client.connected()) {
@@ -166,12 +184,14 @@ void loop() {
     else if (instruct == "lg0") {digitalWrite(9, LOW);}
     else if (instruct == "rst") {recalibrate();}
     else if (instruct == "lck") {propLock = true;}
+    else if (instruct == "ec") {Serial.print(errorCondition);}
     
     else if (instruct.startsWith("mode")) {
       instruct.remove(0, 4);
       mode = instruct.toInt();
       Serial.print("New Mode: ");
       Serial.print(mode);
+      if (mode != 0) {errorCondition = 0;}
     }
     
     else if (instruct.startsWith("gx")) {
@@ -235,10 +255,6 @@ void loop() {
     client.print("\n");
     lastCom = millis();
   }
-
-  //if (millis() - lastCom > 4000) {
-  //  mode = 0;
-  //}
 
   float thrustOffA = 0;
   float thrustOffB = 0;
