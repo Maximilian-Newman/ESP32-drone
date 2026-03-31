@@ -11,15 +11,19 @@ MPU6050 mpu6050(Wire);
 
 const String FIRMWARE_VERSION = "2.1";
 
-byte pinA = 4;
-byte pinB = 5;
-byte pinC = 3;
-byte pinD = 6;
+const byte pinA = 4;
+const byte pinB = 5;
+const byte pinC = 3;
+const byte pinD = 6;
+
+const byte LED_BLUE = 7;
+const byte LED_RED = 8;
+const byte LED_GREEN = 9;
 
 byte mode = 0;
 byte errorCondition = 0; // 0: normal, 1: max-angle protection, 2: communication timeout protection
 
-const float MAX_ANGLE = 800;
+const float MAX_ANGLE = 45;
 const byte TURNING_THRUST_LIMIT = 120;
 float P = 0.02;
 float I = 0.00001;
@@ -52,9 +56,9 @@ void recalibrate(){
   digitalWrite(pinC, LOW);
   digitalWrite(pinD, LOW);
 
-  digitalWrite(7, HIGH); // LED blue
-  digitalWrite(8, LOW);
-  digitalWrite(9, LOW);
+  digitalWrite(LED_BLUE, HIGH);
+  digitalWrite(LED_RED, LOW);
+  digitalWrite(LED_GREEN, LOW);
 
   cmdYaw = 0;
   yaw = 0;
@@ -64,19 +68,19 @@ void recalibrate(){
 
   mpu6050.calcGyroOffsets(true);
 
-  digitalWrite(7, LOW); // LED green
-  digitalWrite(8, LOW);
-  digitalWrite(9, HIGH);
+  digitalWrite(LED_BLUE, LOW);
+  digitalWrite(LED_RED, LOW);
+  digitalWrite(LED_GREEN, HIGH);
 }
  
 void setup() {
   Serial.begin(115200);
-  pinMode(7, OUTPUT);
-  pinMode(8, OUTPUT);
-  pinMode(9, OUTPUT);
-  digitalWrite(7, HIGH); // LED blue
-  digitalWrite(8, LOW);
-  digitalWrite(9, LOW);
+  pinMode(LED_BLUE, OUTPUT);
+  pinMode(LED_RED, OUTPUT);
+  pinMode(LED_GREEN, OUTPUT);
+  digitalWrite(LED_BLUE, HIGH);
+  digitalWrite(LED_RED, LOW);
+  digitalWrite(LED_GREEN, LOW);
 
   delay(3000);
 
@@ -85,8 +89,8 @@ void setup() {
   
   /* if failed (need to find new check condition) {
     Serial.println("Failed to find MPU6050 chip");
-    digitalWrite(7, LOW); // LED red
-    digitalWrite(8, HIGH);
+    digitalWrite(LED_BLUE, LOW);
+    digitalWrite(LED_RED, HIGH);
     delay(2000);
     ESP.restart();
   }*/
@@ -100,8 +104,8 @@ void setup() {
 
   if (timer == NULL) {
       Serial.println("Error with the start of the timer");
-      digitalWrite(7, LOW); // LED red
-      digitalWrite(8, HIGH);
+      digitalWrite(LED_BLUE, LOW);
+      digitalWrite(LED_RED, HIGH);
       while (1);
   }
   timerAttachInterrupt(timer, &gyro_update);
@@ -140,13 +144,13 @@ void loop() {
   if (gyroX > MAX_ANGLE or gyroX < -MAX_ANGLE or gyroY > MAX_ANGLE or gyroY < -MAX_ANGLE) {
     mode = 0;
     errorCondition = 1;
-    digitalWrite(8, HIGH);
+    digitalWrite(LED_RED, HIGH);
   }
 
   if (millis() - lastCom > 10000) {
     mode = 0;
     errorCondition = 2;
-    digitalWrite(8, HIGH);
+    digitalWrite(LED_RED, HIGH);
   }
 
 
@@ -176,12 +180,12 @@ void loop() {
     else if (instruct == "gyroY") {client.print(String(gyroVY));}
     else if (instruct == "gMode") {client.print(String(mode));}
     else if (instruct == "vers") {client.print(FIRMWARE_VERSION);}
-    else if (instruct == "lb1") {digitalWrite(7, HIGH);}
-    else if (instruct == "lb0") {digitalWrite(7, LOW);}
-    else if (instruct == "lr1") {digitalWrite(8, HIGH);}
-    else if (instruct == "lr0") {digitalWrite(8, LOW);}
-    else if (instruct == "lg1") {digitalWrite(9, HIGH);}
-    else if (instruct == "lg0") {digitalWrite(9, LOW);}
+    else if (instruct == "lb1") {digitalWrite(LED_BLUE, HIGH);}
+    else if (instruct == "lb0") {digitalWrite(LED_BLUE, LOW);}
+    else if (instruct == "lr1") {digitalWrite(LED_RED, HIGH);}
+    else if (instruct == "lr0") {digitalWrite(LED_RED, LOW);}
+    else if (instruct == "lg1") {digitalWrite(LED_GREEN, HIGH);}
+    else if (instruct == "lg0") {digitalWrite(LED_GREEN, LOW);}
     else if (instruct == "rst") {recalibrate();}
     else if (instruct == "lck") {propLock = true;}
     else if (instruct == "ec") {Serial.print(errorCondition);}
@@ -191,7 +195,6 @@ void loop() {
       mode = instruct.toInt();
       Serial.print("New Mode: ");
       Serial.print(mode);
-      if (mode != 0) {errorCondition = 0;}
     }
     
     else if (instruct.startsWith("gx")) {
@@ -251,6 +254,7 @@ void loop() {
 
 
 
+    else {client.print("?");} // unknown instruction
 
     client.print("\n");
     lastCom = millis();
