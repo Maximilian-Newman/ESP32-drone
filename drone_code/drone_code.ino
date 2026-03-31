@@ -1,20 +1,15 @@
-#include <Adafruit_MPU6050.h>
-#include <Adafruit_Sensor.h>
+#include <MPU6050_tockn.h>
 #include <Wire.h>
-
-//#include "esp32-hal-timer.h"
-//hw_timer_t *timer = NULL;
-
-
 #include <WiFi.h>
+
 IPAddress apIP(192, 168, 4, 1);
 IPAddress netMsk(255, 255, 255, 0);
 WiFiServer tcpServer(8080);
 WiFiClient client;
 
-Adafruit_MPU6050 mpu;
+MPU6050 mpu6050(Wire);
 
-const String FIRMWARE_VERSION = "2.0";
+const String FIRMWARE_VERSION = "3.0";
 
 byte pinA = 4;
 byte pinB = 5;
@@ -35,21 +30,6 @@ float cmdYaw = 0;
 float targetGyroX = 0;
 float targetGyroY = 0;
 
-float gyroOffsetX = 0;
-float gyroOffsetY = 0;
-float gyroOffsetZ = 0;
-float accOffsetX = 0;
-float accOffsetY = 0;
-float accOffsetZ = 0;
-
-float gyroX = 0;
-float gyroY = 0;
-float gyroVX = 0;
-float gyroVY = 0;
-float gyroVZ = 0;
-
-float lastGyroX = 0;
-float lastGyroY = 0;
 float I_valX = 0;
 float I_valY = 0;
 
@@ -65,71 +45,22 @@ unsigned long lastGyroTime = 0;
 unsigned long lastCom = 0;
 
 
-void gyro_update(){
-  unsigned long newTime = micros();
-  unsigned int dt_1000 = (newTime - lastGyroTime);
-  float dt = dt_1000;
-  dt = dt / 1000;
-  lastGyroTime = newTime;
-
-  lastGyroX = gyroX;
-  lastGyroY = gyroY;
-
-
-  sensors_event_t a, g, temp;
-  mpu.getEvent(&a, &g, &temp);
-
-  gyroVX = g.gyro.x - gyroOffsetX;
-  gyroVY = g.gyro.y - gyroOffsetY;
-  gyroVZ = g.gyro.z - gyroOffsetZ;
-  gyroX -= gyroVX * dt;
-  gyroY -= gyroVY * dt;
-
-  Serial.println(dt);
-}
-
-
 void recalibrate(){
-  digitalWrite(pinA, LOW);
+  digitalWrite(pinA, LOW); // ensure motors off
   digitalWrite(pinB, LOW);
   digitalWrite(pinC, LOW);
   digitalWrite(pinD, LOW);
 
-  sensors_event_t a, g, temp;
-  unsigned int numCalibReadings = 3000;
   digitalWrite(7, HIGH); // LED blue
   digitalWrite(8, LOW);
   digitalWrite(9, LOW);
 
-  gyroX = 0;
-  gyroY = 0;
   cmdYaw = 0;
   yaw = 0;
 
-  gyroOffsetX = 0;
-  gyroOffsetY = 0;
-  accOffsetX = 0;
-  accOffsetY = 0;
-  accOffsetZ = 0;
-
   Serial.println("Callibrating, please wait");
 
-  for (unsigned int i=0; i<numCalibReadings; i++) {
-    mpu.getEvent(&a, &g, &temp);
-    gyroOffsetX += g.gyro.x;
-    gyroOffsetY += g.gyro.y;
-    gyroOffsetZ += g.gyro.z;
-    accOffsetX += a.acceleration.x;
-    accOffsetY += a.acceleration.y;
-    accOffsetZ += a.acceleration.z;
-    delay(2);
-  }
-  gyroOffsetX /= numCalibReadings;
-  gyroOffsetY /= numCalibReadings;
-  gyroOffsetZ /= numCalibReadings;
-  accOffsetX /= numCalibReadings;
-  accOffsetY /= numCalibReadings;
-  accOffsetZ /= numCalibReadings;
+  mpu6050.calcGyroOffsets(true);
 
   digitalWrite(7, LOW); // LED green
   digitalWrite(8, LOW);
@@ -148,14 +79,15 @@ void setup() {
   delay(3000);
 
   Wire.begin(11,10);
-  if (!mpu.begin(0x68)) {
+  mpu6050.begin();
+  
+  /* if failed (need to find new check condition) {
     Serial.println("Failed to find MPU6050 chip");
     digitalWrite(7, LOW); // LED red
     digitalWrite(8, HIGH);
-    while (1) {delay(10);}
-  }
-  mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
-  mpu.setGyroRange(MPU6050_RANGE_500_DEG);
+    delay(2000);
+    ESP.restart();
+  }*/
   recalibrate();
 
   WiFi.softAPConfig(apIP, apIP, netMsk);
@@ -187,7 +119,13 @@ void setup() {
 
 
 void loop() {
-  gyro_update();
+  mpu6050.update();
+
+  float gyroX = mpu6050.getAngleX();
+  float gyroY = mpu6050.getAngleY();
+  float gyroVX = mpu6050.getGyroX();
+  float gyroVY = mpu6050.getGyroY();
+  float gyroVZ = mpu6050.getGyroZ();
 
   unsigned long newTime = micros();
   unsigned int dt_1000 = (newTime - lastTime);
