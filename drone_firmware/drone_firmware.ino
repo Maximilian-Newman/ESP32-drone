@@ -7,7 +7,7 @@ IPAddress netMsk(255, 255, 255, 0);
 WiFiServer tcpServer(8080);
 WiFiClient client;
 
-MPU6050 mpu6050(Wire, 0.0001, 0.9999);
+MPU6050 mpu6050(Wire, 0.00005, 0.99995);
 
 const String FIRMWARE_VERSION = "2.1";
 
@@ -26,8 +26,8 @@ byte errorCondition = 0; // 0: normal, 1: max-angle protection, 2: communication
 const float MAX_ANGLE = 45;
 const byte TURNING_THRUST_LIMIT = 120;
 float P = 1.5;
-float I = 0; //0.00001;
-float D = 0.2; //5;
+float I = 0.0002;
+float D = 0.2;
 
 float yaw = 0;
 float cmdYaw = 0;
@@ -49,6 +49,26 @@ unsigned long lastTime = 0;
 unsigned long lastGyroTime = 0;
 unsigned long lastCom = 0;
 
+
+void reboot(){
+  digitalWrite(pinA, LOW); // ensure motors off
+  digitalWrite(pinB, LOW);
+  digitalWrite(pinC, LOW);
+  digitalWrite(pinD, LOW);
+
+  digitalWrite(LED_BLUE, LOW);
+  digitalWrite(LED_GREEN, LOW);
+
+  for (byte i=0; i<30; i++) {
+    digitalWrite(LED_RED, HIGH);
+    delay(100);
+    digitalWrite(LED_RED, LOW);
+    delay(100);
+  }
+
+  delay(500);
+  ESP.restart();
+}
 
 void recalibrate(){
   digitalWrite(pinA, LOW); // ensure motors off
@@ -73,16 +93,7 @@ void recalibrate(){
   
   if (mpu6050.getAngleX() < -85) {
     Serial.println("Failed to find MPU6050 chip");
-    digitalWrite(LED_BLUE, LOW);
-
-    for (byte i=0; i<30; i++) {
-      digitalWrite(LED_RED, HIGH);
-      delay(100);
-      digitalWrite(LED_RED, LOW);
-      delay(100);
-    }
-    delay(500);
-    ESP.restart();
+    reboot();
   }
 
   digitalWrite(LED_BLUE, LOW);
@@ -199,12 +210,13 @@ void loop() {
     else if (instruct == "rst") {recalibrate();}
     else if (instruct == "lck") {propLock = true;}
     else if (instruct == "ec") {client.print(errorCondition);}
+    else if (instruct == "reboot") {client.print("\n"); reboot();}
     
     else if (instruct.startsWith("mode")) {
       instruct.remove(0, 4);
       mode = instruct.toInt();
-      Serial.print("New Mode: ");
-      Serial.print(mode);
+      //Serial.print("New Mode: ");
+      //Serial.print(mode);
     }
     
     else if (instruct.startsWith("gx")) {
@@ -383,5 +395,5 @@ void loop() {
   analogWrite(pinC, newThrustC);
   analogWrite(pinD, newThrustD);
 
-  Serial.println(gyroX);
+  //Serial.println(gyroX);
 }
