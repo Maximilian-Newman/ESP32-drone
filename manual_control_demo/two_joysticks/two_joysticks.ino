@@ -20,7 +20,7 @@ int yaw = 0;
 int targetX = 0;
 int targetY = 0;
 
-unsigned int PERIOD = 200;
+unsigned int PERIOD = 300;
 unsigned long nextTime = 0;
 
 long joyOffsetRX = 0;
@@ -66,8 +66,8 @@ void increment_base_thrust(int val) {
 void set_base_thrust(int val) {
   String sval = String(val);
   msg("manT\n" + sval + "," + sval + "," + sval + "," + sval);
-  Serial.print("set thrust: ");
-  Serial.println(val);
+  //Serial.print("set thrust: ");
+  //Serial.println(val);
 }
 
 void set_yaw(int y) {
@@ -228,8 +228,8 @@ void loop() {
       else {increment_base_thrust(-5);}
     }*/
 
-    targetX = -vry / 6;
-    targetY = vrx / 6;
+    targetX = -vry / 70;
+    targetY = vrx / 70;
 
     msg("gx" + String(targetX));
     msg("gy" + String(targetY));
@@ -243,12 +243,21 @@ void loop() {
     }
     */
 
-    set_yaw(vlx / 30);
-    set_base_thrust(vly / 12);
+    if (abs(vlx) / 30 > 10){
+      set_yaw(vlx / 30);
+    }
+    else{
+      set_yaw(0);
+    }
+    set_base_thrust(vly / 15);
 
 
     rightIsClicked = false;
     leftIsClicked = false;
     leftJoyIsClicked = false;
+
+    Serial.print(targetX);
+    Serial.print("\t");
+    Serial.println(targetY);
   }
 }
