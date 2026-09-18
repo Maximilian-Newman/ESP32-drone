@@ -28,11 +28,12 @@ byte errorCondition = 0; // 0: normal, 1: max-angle protection, 2: communication
 
 const float MAX_ANGLE = 50;
 const byte TURNING_THRUST_LIMIT = 120;
-float P = 0.05;
+float P = 0.1;
 float I = 0.00003;
 float D = 1;
 float accFilter = 0.995;
 float gyroAccComponent = 0.002;
+float accroSensitivity = 0.1;
 
 float yaw = 0;
 float cmdYaw = 0;
@@ -327,6 +328,11 @@ void loop() {
       D = instruct.toFloat();
     }
     
+    else if (instruct.startsWith("gainA")) {
+      instruct.remove(0, 5);
+      accroSensitivity = instruct.toFloat();
+    }
+    
     else if (instruct.startsWith("yaw")) {
       instruct.remove(0, 3);
       cmdYaw = instruct.toFloat();
@@ -390,7 +396,7 @@ void loop() {
   float thrustOffC = 0;
   float thrustOffD = 0;
 
-  if (mode == 2){
+  if (mode == 2){ // angle mode
     if (gyroVZ > cmdYaw) {yaw += 1;}
     else if (gyroVZ < cmdYaw) {yaw -= 1;}
 
@@ -427,6 +433,41 @@ void loop() {
     thrustOffB -= D * gyroVY * dt;
     thrustOffC += D * gyroVY * dt;
     thrustOffD -= D * gyroVY * dt;
+  }
+
+
+
+
+
+  if (mode == 3) { // accro / rate mode
+    if (gyroVZ > cmdYaw) {yaw += 1;}
+    else if (gyroVZ < cmdYaw) {yaw -= 1;}
+
+    if (gyroVX > targetGyroX) {
+      thrustOffA -= accroSensitivity;
+      thrustOffB -= accroSensitivity;
+      thrustOffC += accroSensitivity;
+      thrustOffD += accroSensitivity;
+    }
+    else if (gyroVX < targetGyroX) {
+      thrustOffA += accroSensitivity;
+      thrustOffB += accroSensitivity;
+      thrustOffC -= accroSensitivity;
+      thrustOffD -= accroSensitivity;
+    }
+
+    if (gyroVY > targetGyroY) {
+      thrustOffA -= accroSensitivity;
+      thrustOffB += accroSensitivity;
+      thrustOffC -= accroSensitivity;
+      thrustOffD += accroSensitivity;
+    }
+    else if (gyroVX < targetGyroX) {
+      thrustOffA += accroSensitivity;
+      thrustOffB -= accroSensitivity;
+      thrustOffC += accroSensitivity;
+      thrustOffD -= accroSensitivity;
+    }
   }
 
 
