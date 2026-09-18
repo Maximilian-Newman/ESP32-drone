@@ -23,7 +23,7 @@ const byte LED_BLUE = 7;
 const byte LED_RED = 8;
 const byte LED_GREEN = 9;
 
-byte mode = 0;
+byte mode = 0; // 0: shutdown, 1: manual thrust control, 2: angle hold, 3: accro, 4: no gyro accro
 byte errorCondition = 0; // 0: normal, 1: max-angle protection, 2: communication timeout protection
 
 const float MAX_ANGLE = 50;
@@ -33,7 +33,7 @@ float I = 0.00003;
 float D = 1;
 float accFilter = 0.995;
 float gyroAccComponent = 0.002;
-float accroSensitivity = 0.1;
+float accroSensitivity = 1;
 
 float yaw = 0;
 float cmdYaw = 0;
@@ -89,9 +89,9 @@ void gyro_update(){
   sensors_event_t a, g, temp;
   mpu.getEvent(&a, &g, &temp);
 
-  gyroVX = (g.gyro.x - gyroOffsetX) * 180 / PI;
-  gyroVY = (g.gyro.y - gyroOffsetY) * 180 / PI;
-  gyroVZ = (g.gyro.z - gyroOffsetZ) * 180 / PI;
+  gyroVX = 0.8 * gyroVX + 0.2 * (g.gyro.x - gyroOffsetX) * 180 / PI;
+  gyroVY = 0.8 * gyroVY + 0.2 * (g.gyro.y - gyroOffsetY) * 180 / PI;
+  gyroVZ = 0.8 * gyroVZ + 0.2 * (g.gyro.z - gyroOffsetZ) * 180 / PI;
 
   accX = accFilter * accX + (1 - accFilter) * (a.acceleration.x - accOffsetX);
   accY = accFilter * accY + (1 - accFilter) * (a.acceleration.y - accOffsetY);
@@ -105,6 +105,7 @@ void gyro_update(){
   gyroX = gyroAccComponent * accPitch + (1 - gyroAccComponent) * (gyroX - gyroVX * dt / 1000);
   gyroY = gyroAccComponent * accRoll + (1 - gyroAccComponent) * (gyroY - gyroVY * dt / 1000);
 
+  /*
   Serial.print(gyroX);
   Serial.print('\t');
   Serial.print(accPitch);
@@ -121,6 +122,7 @@ void gyro_update(){
   Serial.print(accZ);
   Serial.print('\t');
   Serial.println(dt);
+  */
 }
 
 
@@ -443,6 +445,17 @@ void loop() {
     if (gyroVZ > cmdYaw) {yaw += 1;}
     else if (gyroVZ < cmdYaw) {yaw -= 1;}
 
+    thrustOffA -= accroSensitivity * (gyroVX - targetGyroX) * dt;
+    thrustOffB -= accroSensitivity * (gyroVX - targetGyroX) * dt;
+    thrustOffC += accroSensitivity * (gyroVX - targetGyroX) * dt;
+    thrustOffD += accroSensitivity * (gyroVX - targetGyroX) * dt;
+
+    thrustOffA -= accroSensitivity * (gyroVY - targetGyroY) * dt;
+    thrustOffB += accroSensitivity * (gyroVY - targetGyroY) * dt;
+    thrustOffC -= accroSensitivity * (gyroVY - targetGyroY) * dt;
+    thrustOffD += accroSensitivity * (gyroVY - targetGyroY) * dt;
+
+    /*
     if (gyroVX > targetGyroX) {
       thrustOffA -= accroSensitivity;
       thrustOffB -= accroSensitivity;
@@ -462,11 +475,54 @@ void loop() {
       thrustOffC -= accroSensitivity;
       thrustOffD += accroSensitivity;
     }
-    else if (gyroVX < targetGyroX) {
+    else if (gyroVY < targetGyroY) {
       thrustOffA += accroSensitivity;
       thrustOffB -= accroSensitivity;
       thrustOffC += accroSensitivity;
       thrustOffD -= accroSensitivity;
+    }
+    */
+
+    if (cmdYaw == 0 and targetGyroX == 0 and targetGyroY == 0 and thrustA == 0) {
+      // stop all props if command thrust = 0 (faster than hitting kill button)
+      thrustOffA = 0;
+      thrustOffB = 0;
+      thrustOffC = 0;
+      thrustOffD = 0;
+      yaw = 0;
+    }
+
+
+    if (millis() - lastCom > 400) {
+      mode = 0;
+      errorCondition = 2;
+      digitalWrite(LED_RED, HIGH);
+    }
+  }
+
+  if (mode == 4) { // full manual mode
+    if (gyroVZ > cmdYaw) {yaw += 1;}
+    else if (gyroVZ < cmdYaw) {yaw -= 1;}
+
+    thrustOffA = targetGyroX + targetGyroY;
+    thrustOffB = targetGyroX - targetGyroY;
+    thrustOffC = -targetGyroX + targetGyroY;
+    thrustOffD = -targetGyroX - targetGyroY;
+
+
+    if (cmdYaw == 0 and targetGyroX == 0 and targetGyroY == 0 and thrustA == 0) {
+      // stop all props if command thrust = 0 (faster than hitting kill button)
+      thrustOffA = 0;
+      thrustOffB = 0;
+      thrustOffC = 0;
+      thrustOffD = 0;
+      yaw = 0;
+    }
+    
+    if (millis() - lastCom > 400) {
+      mode = 0;
+      errorCondition = 2;
+      digitalWrite(LED_RED, HIGH);
     }
   }
 
